@@ -158,11 +158,75 @@ function Add-LocalUsersToAdministrators {
     }
 }
 
-# === MAIN EXECUTION ===
+# === FUNCTION: DISABLE BITLOCKER ===
+function Disable-BitLockerVolume {
+    <#
+    .SYNOPSIS
+    Disables BitLocker on the specified drive.
 
+    .DESCRIPTION
+    Checks if BitLocker is currently enabled on a given drive (default is C:).
+    If enabled, suspends or disables it to ensure the device is no longer encrypted.
+    #>
+
+    param (
+        [string]$DriveLetter = "C:"
+    )
+
+    Write-Host "Checking BitLocker status on $DriveLetter..." -ForegroundColor Cyan
+    try {
+        $bitLockerStatus = (Get-BitLockerVolume -MountPoint $DriveLetter -ErrorAction Stop)
+        if ($bitLockerStatus.ProtectionStatus -eq "On") {
+            Write-Host "BitLocker is enabled. Disabling BitLocker on $DriveLetter..." -ForegroundColor Cyan
+            Disable-BitLocker -MountPoint $DriveLetter | Out-Null
+            Write-Host "BitLocker has been disabled on $DriveLetter. Decryption may be in progress." -ForegroundColor Green
+        } else {
+            Write-Host "BitLocker is not enabled on $DriveLetter." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "Failed to check or disable BitLocker. Error: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+
+# === FUNCTION: NOTIFY USERS ABOUT RIPPLING REMOVAL ===
+function Notify-Users {
+    <#
+    .SYNOPSIS
+    Notifies all logged-on users that Rippling has been removed.
+
+    .DESCRIPTION
+    Uses the 'msg' command to send a broadcast message to all sessions.
+    This will display a popup-style message in the user's session indicating
+    that Rippling is removed and providing a link to enroll in Intune.
+    #>
+    
+    $message = "Rippling has been removed from this device. Please visit the following link to enroll in Intune: `nhttps://submittable.atlassian.net/wiki/x/BYCdPg"
+    
+    Write-Host "Notifying all logged-on users about Rippling removal..." -ForegroundColor Cyan
+    try {
+        # /time:0 sets no timeout, ensuring the message stays until user acknowledges
+        # * targets all sessions
+        msg * /time:0 $message
+        Write-Host "Notification sent to all users." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to send notification to all users. Error: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# === MAIN EXECUTION ===
 Write-Host "Starting Rippling Removal Script..." -ForegroundColor Cyan
 Remove-RipplingMDM
 Remove-RipplingDirectories
 Remove-SpecificRegistryKey
 Add-LocalUsersToAdministrators
+
+
+# Disable BitLocker before finalizing
+Disable-BitLockerVolume
+
+# Notify users at the very end
+Notify-Users
+
 Write-Host "Rippling Removal Script completed." -ForegroundColor Green
+
